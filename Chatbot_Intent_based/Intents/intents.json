@@ -1,0 +1,160 @@
+{
+  "intents": [
+    {
+      "tag": "greeting",
+      "patterns": [
+        "Hi there",
+        "hii",
+        "hiiiiiii",
+        "hiii",
+        "How are you",
+        "Hey Ben",
+        "Hello Ben",
+        "Is anyone there?",
+        "Hey",
+        "Hola",
+        "hello",
+        "helloo",
+        "helloooo",
+        "hey",
+        "hyy",
+        "Good day",
+        "How's it going?",
+        "Yo!",
+        "Greetings!",
+        "Howdy",
+        "Hello there!"
+      ],
+      "responses": [
+        "Hello! 😊 Thanks for reaching out! How can I help you today? 🤗",
+        "Good to see you again! What’s new with you? 🙂",
+        "Hi there! 😊 How can I assist you today? If you have any questions, I'm here! 🤗",
+        "Hi! 😊 What can I help you with today? Feel free to ask anything! 🤗",
+        "Hello! 😊 How can I assist you today? I'm all ears! 🤗",
+        "Glad to have you here! What’s on your mind? 🙂",
+        "Hey! 😊 What’s on your mind? I’m here to help! 🤗",
+        "Hey, It's nice to hear from you! 😊 How can I assist you today? 🤗"
+      ],
+      "context": [
+        "user initiates conversation",
+        "friendly interaction"
+      ]
+    },
+    {
+      "tag": "goodbye",
+      "patterns": [
+        "bye",
+        "BYEE",
+        "byeeeee",
+        "byee",
+        "See you later",
+        "Goodbye",
+        "Nice chatting to you, bye",
+        "Till next time",
+        "Take care",
+        "Catch you later",
+        "Have a good one",
+        "Until next time",
+        "See you soon!",
+        "Talk to you later",
+        "Goodbye for now"
+      ],
+      "responses": [
+        "Goodbye! 🏗️ If you have any questions in the future or need assistance, feel free to reach out. Come back later, and let's find more property for you! 🏡",
+        "See you! 🛠️ Have a wonderful day! Remember, I'm here to help you with any property needs. 🏘️",
+        "Take care! 🏠 Looking forward to our next chat! Let's explore more options together. 🏢",
+        "Until next time! 🏗️ Stay safe, and don't hesitate to come back for more property advice! 🏡",
+        "Have a nice day! 🛠️ I'm always here for your property inquiries. Let's chat again soon! 🏘️"
+      ],
+      "context": [
+        "user ending conversation",
+        "farewell interaction"
+      ]
+    },
+    {
+      "tag": "thanks",
+      "patterns": [
+        "You are good",
+        "you are soo good",
+        "Thanks",
+        "Thank you",
+        "helpful",
+        "Awesome, thanks",
+        "Thanks for helping me",
+        "I appreciate it",
+        "You're awesome",
+        "Thanks a lot",
+        "Thank you so much",
+        "Many thanks",
+        "Thanks for your support",
+        "You’re a lifesaver",
+        "I owe you one"
+      ],
+      "responses": [
+        "Happy to help! 🏗️ If you have more questions, just ask!",
+        "Any time! 🏡 I'm always here for your property needs!",
+        "My pleasure! 🛠️ Let me know how else I can assist you!",
+        "I'm glad I could assist you! 🏠 Your success is my priority!",
+        "Your appreciation means a lot! 🏢 Let's keep finding the perfect options for you!",
+        "I'm here to help! Anytime! 🏗️ Don't hesitate to reach out!",
+        "Thank you for your kind words! 🏡 I'm always ready to assist!",
+        "Always here for you! 🛠️ Let's discover more great properties together!"
+      ],
+      "context": [
+        "user expresses gratitude",
+        "positive reinforcement"
+      ]
+    },
+    {
+      "tag": "help",
+      "patterns": [
+        "assist me?",
+        "help me ?",
+        "need help",
+        "Help me out",
+        "I'm stuck",
+        "Just stuck",
+        "you help?",
+        "don't know what to do",
+        "need guidance",
+        "Please assist",
+        "require help",
+        "you support me?",
+        "for assistance",
+        "you do for me?"
+      ],
+      "responses": [
+        "Of course! What do you need help with? 😊",
+        "I'm here to help! Just let me know what you need. 😊",
+        "Absolutely! What assistance do you require? 😊",
+        "I'm ready to help you! Just ask away. 😊",
+        "Let me know your issue, and I’ll do my best to assist you! 😊",
+        "How can I support you today? 😊"
+      ],
+      "context": [
+        "user requests assistance",
+        "seeking support"
+      ]
+    },
+    {
+      "tag": "jokes",
+      "patterns": [
+        "a joke",
+        "me laugh",
+        "funny story?",
+        "good joke?",
+        "funny line",
+        "Tell me something funny"
+      ],
+      "responses": [
+        "Why did the scarecrow win an award? Because he was outstanding in his field!",
+        "I told my computer I needed a break, and now it won’t stop sending me Kit-Kat ads!",
+        "Why don’t skeletons fight each other? They don’t have the guts."
+      ],
+      "context": [
+        "user seeks entertainment",
+        "request for humor"
+      ]
+    }
+  ]
+}
