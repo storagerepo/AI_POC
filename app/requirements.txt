@@ -1,0 +1,35 @@
+fastapi==0.95.0
+uvicorn==0.22.0
+
+# For Machine Learning and Neural Networks
+tensorflow==2.13.0  # or keras if you prefer
+torch==2.0.1
+scikit-learn==1.2.2
+joblib==1.2.0
+
+# For NLP and BERT
+# transformers==4.30.0
+# sentence-transformers==2.2.2
+
+# For handling vector databases
+# faiss-cpu==1.7.2  # For Faiss, adjust if using a different vector DB
+# or any other vector database client you are using
+
+# For data manipulation
+pandas==2.0.2
+numpy==1.24.3
+
+# For JSON handling
+pydantic==1.10.9
+
+# Optional: If you need to handle logging
+loguru==0.6.0
+
+# Optional: If using Docker for deployment
+# python-dotenv==1.0.0  # For loading environment variables
+
+# Testing
+pytest==7.3.1
+httpx==0.24.0  # For making HTTP requests in tests
+
+# Additional dependencies may be required based on your specific use cases.
