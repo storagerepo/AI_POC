@@ -1,29 +1,27 @@
 from fastapi import APIRouter
+import numpy as np
 from pydantic import BaseModel
 import joblib
 import pandas as pd
 
-# Load the trained model
-model = joblib.load("ml/Price_Prediction_model.pkl")
+model = joblib.load("ml/Price1.pkl")
 
-# Define input model without default values
 class InputModel(BaseModel):
+    bedrooms: int
     sqft: float
-    bathrooms: float
-    bedrooms: float
     location: str
-    halls: int
-    balconies: int
-    parking_spaces: int
-    age_of_property: int
-    furnishing: str
-    facing_direction: str
-    floor_number: int
-    total_floors: int
-    has_lift: bool
-    property_type: str
+    bathrooms: int
+    halls: int = None
+    balconies: int = None
+    parking_spaces: int = None
+    age_of_property: int = None
+    furnishing: str = None
+    facing_direction: str = None
+    floor_number: int = None
+    total_floors: int = None
+    has_lift: bool = None
+    property_type: str = None
 
-# Define prediction response model
 class PredictionResponse(BaseModel):
     predictedPrice: float
 
@@ -31,11 +29,13 @@ router = APIRouter()
 
 @router.post("/pricePredict", response_model=PredictionResponse)
 async def make_prediction(input_data: InputModel):
-    # Convert input data to DataFrame for prediction
-    input_df = pd.DataFrame([input_data.dict()])
-
-    # Predict price
-    prediction = model.predict(input_df)
-
-    # Return prediction
-    return PredictionResponse(predictedPrice=prediction[0])
+    mandatory_features = ['bedrooms', 'sqft', 'location', 'bathrooms']
+    optional_features = ['halls', 'balconies', 'parking_spaces', 'age_of_property',
+                         'furnishing', 'facing_direction', 'floor_number', 'total_floors',
+                         'has_lift', 'property_type']
+    input_data_dict = input_data.dict() 
+    input_complete = {feature: input_data_dict.get(feature, np.nan) for feature in mandatory_features + optional_features}
+    input_df = pd.DataFrame([input_complete])
+    predicted_price = model.predict(input_df)[0]  
+    return {"predictedPrice": float(predicted_price)}  
+    
