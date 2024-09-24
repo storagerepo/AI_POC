@@ -82,3 +82,27 @@ print(f"Mean Squared Error (MSE): {mse}")
 print(f"Mean Absolute Error (MAE): {mae}")
 print(f"R-squared (R²): {r2}")
 print(f"Model Accuracy: {accuracy:.2f}%")
+
+# Load the saved model
+loaded_model = joblib.load('Price_Prediction.pkl')
+
+# Create a DataFrame for new data
+new_data = pd.DataFrame({
+    'bedrooms': [3],
+    'sqft': [2000],
+    'location': ['New York'],
+    'bathrooms': [2],
+    'halls': [1],
+    'balconies': [1],
+
+})
+
+# Ensure all required features are present
+for feature in optional_features:
+    if feature not in new_data.columns:
+        new_data[feature] = np.nan
+
+# Preprocess and make predictions
+predicted_price = loaded_model.predict(new_data[available_features])
+
+print(f"Predicted Price: {predicted_price[0]}")
