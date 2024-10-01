@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import joblib
 import pandas as pd
 
+
 model = joblib.load("ml/Price1.pkl")
 
 class InputModel(BaseModel):

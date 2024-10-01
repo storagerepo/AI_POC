@@ -1,9 +1,11 @@
 from fastapi import FastAPI
-from api.pricePrediction import router as api_router
+from api.pricePrediction import router as pricePredictionRouter
+from api.propertyRecommendations import router as propertyRecommendation
 import uvicorn
 app = FastAPI(debug=True)
 
-app.include_router(api_router, prefix="/api/pricePredictions")
+app.include_router(pricePredictionRouter, prefix="/api/pricePredictions")
+app.include_router(propertyRecommendation,prefix="/api/propertyRecommendation")
 
 
 @app.get("/")
