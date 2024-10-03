@@ -19,17 +19,13 @@ app.add_middleware(
     allow_headers=["*"], 
 )
 
-
 @app.post("/get_response")
 async def get_response(request: Request):
     data = await request.json()
     user_input = data['user_input']
-
-    context_results = vector_store.search_context(user_input,n_results=5) 
-    context = " ".join(result['document'] for result in context_results) 
-    response = together_client.get_response(user_input, context)
+    context_results = vector_store.search_context(user_input) 
+    response = together_client.get_response(user_input, context_results)
     vector_store.populate_vectors(user_input, response)
-
     return {"response": response}
 
 if __name__ == '__main__':
