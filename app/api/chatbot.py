@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Request,APIRouter
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.llm_api import TogetherAPIClient
+from api.llm_api import TogetherAPIClient
 import uvicorn
-from app.api.chroma_handler import VectorStore 
+from api.chroma_handler import VectorStore 
 from pydantic import BaseModel
 
 vector_store = VectorStore(collection_name="chatbot_conversations")
