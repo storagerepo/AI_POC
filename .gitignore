@@ -1,2 +1,14 @@
 .venv
 __pycache__
+assessment.txt
+Makefile
+req.txt
+volumes
+.env
+app/utils/__pycache__
+app/models/__pycache__
+app/__pycache__
+app/api/__pycache__
+app/services/__pycache__
+groq.txt
+docker-compose.yml
