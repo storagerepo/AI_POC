@@ -1,0 +1,6 @@
+property_1 : '5560 Carriage Walk Way, Stone Mountain, GA 30087'
+property_2 : '2001 Hollow Field Ln, Greenbrier, TN 37073'
+property_3 : '3720 Gorman Ave, Waco, TX 76710'
+
+
+Can check with other Realtor Platforms.
