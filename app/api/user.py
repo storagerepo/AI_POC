@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException,Form,Cookie,Response,Reque
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from db import get_db
-from models import User
+from models import User,Roles
 from api.auth import role_required
 import httpx
 from fastapi.security import OAuth2PasswordBearer
@@ -250,4 +250,120 @@ async def logout(request: Request, response: Response = None):
 
     response.delete_cookie('refresh_token', path='/')
     response.delete_cookie('access_token', path='/')
+    return response
+
+
+async def get_user_info(access_token: str):
+    """Fetch user info from Google using the access token."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            response.raise_for_status()  # Raise an error for bad responses
+            return response.json()
+    
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            raise ValueError("Access token is invalid or expired.")
+        else:
+            raise ValueError(f"Failed to fetch user info: {e.response.status_code}")
+    
+    except httpx.RequestError as e:
+        raise ValueError(f"An error occurred while requesting user info: {e}")
+
+@router.post("/login/google")
+async def login_google(google_login: GoogleLogin, db: Session = Depends(get_db)):
+    # Fetch user info using the access token
+    user_info = await get_user_info(google_login.token)
+    
+    # Extract the username and password (split email and use before @ as password)
+    username = user_info['email']
+    password = (user_info['email']).split('@')[0]
+    try:
+        # Attempt to create the user in Keycloak
+        user_id = keycloak_admin.create_user({
+            "username": username,
+            "email": user_info['email'],
+            "firstName": user_info['given_name'],
+            "lastName": user_info['family_name'],
+            "enabled": True,
+            "credentials": [{
+                "type": "password",
+                "value": password,
+                "temporary": False
+            }]
+        })
+
+        # Verify email and clear any required actions
+        keycloak_admin.update_user(user_id, {"emailVerified": True})
+        clear_user_required_actions(user_id)
+
+    except KeycloakPostError as e:
+        # If user already exists in Keycloak (409 conflict error)
+        if e.response_code == 409:
+            # Authenticate existing user to get an access token
+            token = get_tokens(username, password)
+            user_details = {"username": username, "email":user_info['email'],"access_token": token['access_token'],
+            "refresh_token": token['refresh_token']}
+            response = JSONResponse(content=user_details, status_code=200)    
+            access_token = token['access_token']
+            refresh_token = token['refresh_token']
+            refresh_expires = 3600  # 30 days vs. 1 hour
+            response.set_cookie('refresh_token', refresh_token, httponly=True, expires=refresh_expires, path='/', samesite='None', secure=True)
+            response.set_cookie('access_token', access_token, httponly=True, expires=60, path='/', samesite='None', secure=True)
+            return response
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": False,
+                    "message": f"Failed to create or login user in Keycloak: {str(e)}",
+                    "code": 500
+                }
+            )
+
+    # If new user registered, authenticate and return access token
+    token = keycloak_openid.token(username=username, password=password)
+    user_details = {"username": username, "email":user_info['email'],"access_token": token['access_token'],
+            "refresh_token": token['refresh_token']}
+    response = JSONResponse(content=user_details, status_code=200)    
+    access_token = token['access_token']
+    refresh_token = token['refresh_token']
+    refresh_expires = 3600  # 30 days vs. 1 hour
+    response.set_cookie('refresh_token', refresh_token, httponly=True, expires=refresh_expires, path='/', samesite='None', secure=True)
+    response.set_cookie('access_token', access_token, httponly=True, expires=60, path='/', samesite='None', secure=True)
+    # Optionally, save user in local DB for future references
+# Query the role
+    role = db.query(Roles).filter(Roles.role == 'PORTAL_USER').first()
+
+# Check if the role was found
+    if role is None:
+        print("Role 'PORTAL_USER' not found in the database.")
+        # Optionally, handle this case, e.g., by raising an exception or returning early
+        raise ValueError("Role 'PORTAL_USER' does not exist")
+
+    # Ensure user_info contains the necessary data
+    if 'username' not in user_details or 'email' not in user_details:
+        raise ValueError("user_info must contain 'username' and 'email'")
+    print(user_details,role)
+    # Create and add the new user
+    user = User(
+        username=user_details['username'],
+        email=user_details['email'],
+        role_id=role.role_id
+    )
+
+    # Add and commit the user to the database
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        print("User successfully added:", user)
+    except Exception as e:
+        db.rollback()  # Rollback the transaction in case of an error
+        print("Error occurred while adding the user:", str(e))
+
+
     return response

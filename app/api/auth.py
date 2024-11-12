@@ -21,7 +21,6 @@ def role_required(required_roles: list):
             print(user_email)
             # Fetch the user from the database
             user = db.query(User).filter(User.email == user_email).first()
-            print(user.role.role)
             if user is None:
                 return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"status":False,"message":"User not found"})
 

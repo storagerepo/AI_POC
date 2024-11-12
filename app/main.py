@@ -1,11 +1,13 @@
 from fastapi import FastAPI, Depends
-from db import database, get_db, create_tables,check_connection  # Import create_tables function
+from db import database, get_db, create_tables,check_connection,check_influx_connection  # Import create_tables function
 from api.pricePrediction import router as pricePredictionRouter
 from api.propertyRecommendations import router as propertyRecommendationRouter
-from api.chatbot import router as chatBotRouter
+# from api.chatbot import router as chatBotRouter
 from api.role import router as roleRouter# from api.chatbot import router as chatBotRouter
 from fastapi.middleware.cors import CORSMiddleware
 from api.user import router as userRouter
+from api.property import router as propertyRouter
+from influx_db import router as influxRouter
 import uvicorn
 
 app = FastAPI()
@@ -14,9 +16,10 @@ app = FastAPI()
 # Include routers
 app.include_router(pricePredictionRouter, prefix="/api/pricePredictions")
 app.include_router(propertyRecommendationRouter, prefix="/api/propertyRecommendations")
-app.include_router(chatBotRouter, prefix='/api/chatBot')
+# app.include_router(chatBotRouter, prefix='/api/chatBot')
 app.include_router(userRouter, prefix='/api/user')
-app.include_router(roleRouter, prefix='/api/role')
+app.include_router(propertyRouter, prefix='/api/property')
+app.include_router(influxRouter, prefix='/api/influx')
 
 
 app.add_middleware(
@@ -32,7 +35,7 @@ async def startup():
     print("Starting FastAPI application...")
     await database.connect()
     check_connection() 
-    # check_influx_connection() # Connect to the async database
+    check_influx_connection() # Connect to the async database
     create_tables()  # Create tables
 
 @app.on_event("shutdown")
