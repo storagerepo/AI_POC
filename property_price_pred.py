@@ -513,6 +513,12 @@ def visualize_price_predictions(
     # Tight layout to prevent label cutoff
     plt.tight_layout()
     
+    # Save the plot
+    plt.savefig('price_predictions.png', dpi=300, bbox_inches='tight')
+    
+    # Clear the current figure to free memory
+    plt.close()
+    
     return plt.gcf()
 
 # %%
