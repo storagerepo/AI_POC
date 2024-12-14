@@ -28,9 +28,10 @@ print(f"Using device: {device}")
 RANDOM_SEED = 42
 BATCH_SIZE = 32
 NUM_WORKERS = 0
-EPOCHS = 500
+EPOCHS = 1000
 PATIENCE = 50
-LEARNING_RATE = 0.0001  
+LEARNING_RATE = 0.00005
+WEIGHT_DECAY = 0.01  # L2 regularization
 
 # Set random seeds
 torch.manual_seed(RANDOM_SEED)
@@ -71,7 +72,10 @@ numerical_features = [
     'FullBath',      # Number of full bathrooms
     'TotRmsAbvGrd',  # Total rooms above ground (excluding bathrooms)
     'YearBuilt',     # Original construction date
-    'YearRemodAdd'   # Remodel date
+    'YearRemodAdd',  # Remodel date
+    'LotArea',       # Lot size in square feet
+    '2ndFlrSF',      # Second floor square feet
+    'BsmtFinSF1'     # Type 1 finished square feet
 ]
 
 categorical_features = [
@@ -79,7 +83,12 @@ categorical_features = [
     'Street',        # Type of road access
     'Alley',         # Type of alley access
     'LotShape',      # General shape of property
-    'LandContour'    # Flatness of the property
+    'LandContour',   # Flatness of the property
+    'Neighborhood',  # Physical locations within Ames city limits
+    'BldgType',      # Type of dwelling
+    'HouseStyle',    # Style of dwelling
+    'RoofStyle',     # Type of roof
+    'Exterior1st'    # Exterior covering on house
 ]
 
 print("\nSelected features:")
@@ -92,6 +101,28 @@ print("\nCategorical features:", categorical_features)
 print("\nHandling missing values:")
 df[numerical_features] = df[numerical_features].fillna(df[numerical_features].median())
 df[categorical_features] = df[categorical_features].fillna(df[categorical_features].mode().iloc[0])
+
+# Feature engineering
+print("\nEngineering new features...")
+
+# Age features
+df['HouseAge'] = datetime.now().year - df['YearBuilt']
+df['LastRemodAge'] = datetime.now().year - df['YearRemodAdd']
+df['RemodAge'] = df['YearRemodAdd'] - df['YearBuilt']
+
+# Area interactions
+df['TotalSF'] = df['GrLivArea'] + df['TotalBsmtSF']
+df['AvgRoomSize'] = df['GrLivArea'] / df['TotRmsAbvGrd']
+df['TotalBathrooms'] = df['FullBath'] + df['HalfBath'] * 0.5
+
+# Quality interactions
+df['QualityAge'] = df['OverallQual'] * df['HouseAge']
+df['QualityArea'] = df['OverallQual'] * df['TotalSF']
+
+# Add engineered features to numerical_features
+engineered_features = ['HouseAge', 'LastRemodAge', 'RemodAge', 'TotalSF', 
+                      'AvgRoomSize', 'TotalBathrooms', 'QualityAge', 'QualityArea']
+numerical_features.extend(engineered_features)
 
 # Encode categorical features
 label_encoders = {}
@@ -192,42 +223,67 @@ class HousePriceModel(nn.Module):
     def __init__(self, input_size: int, hidden_size: int = 256):
         super().__init__()
         
-        self.model = nn.Sequential(
-            # First layer with larger size
+        # Input layer
+        self.input_layer = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_size),
-            nn.Dropout(0.1),
-            
-            # Second layer
+            nn.Dropout(0.2)
+        )
+        
+        # Deep layers with residual connections
+        self.deep_layer1 = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_size),
-            nn.Dropout(0.1),
-            
-            # Third layer with residual connection
+            nn.Dropout(0.2)
+        )
+        
+        self.deep_layer2 = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_size),
-            nn.Dropout(0.1),
-            
-            # Fourth layer
+            nn.Dropout(0.2)
+        )
+        
+        self.deep_layer3 = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.BatchNorm1d(hidden_size),
+            nn.Dropout(0.2)
+        )
+        
+        # Output layers
+        self.output_layers = nn.Sequential(
             nn.Linear(hidden_size, hidden_size//2),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_size//2),
-            nn.Dropout(0.1),
-            
-            # Output layer
+            nn.Dropout(0.2),
             nn.Linear(hidden_size//2, 1)
         )
-    
+        
     def forward(self, x):
-        return self.model(x)
+        # Input processing
+        x = self.input_layer(x)
+        
+        # Residual connections
+        identity1 = x
+        x = self.deep_layer1(x) + identity1
+        
+        identity2 = x
+        x = self.deep_layer2(x) + identity2
+        
+        identity3 = x
+        x = self.deep_layer3(x) + identity3
+        
+        # Output processing
+        x = self.output_layers(x)
+        return x
 
 # Initialize model, loss, and optimizer
 model = HousePriceModel(input_size=len(X.columns)).to(device)
 loss_fn = nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
 # %%
 # Training and testing steps
@@ -515,21 +571,23 @@ def test_saved_model(house_index=0):
 
 # %%
 # Function to make predictions for multiple years
-def test_predictions(model):
-    print("\nPredicting house prices for the next 5 years...")
+def test_predictions(model, num_years=5):
+  
     predictions = {}
+    
+    # Use the first test sample
     sample_house = X_test.iloc[0]
 
-    for year in range(current_year + 1, current_year + 8):  
+    for year in range(datetime.now().year + 1, datetime.now().year + num_years + 1):  
         predicted_price = predict_future_price(
-            model, sample_house, year, current_year
+            model, sample_house, year, datetime.now().year
         )
         predictions[year] = predicted_price
         print(f"Predicted price for {year}: ${predicted_price:,.2f}")
 
     # Visualize predictions
     visualize_price_predictions(
-        current_year=current_year,
+        current_year=datetime.now().year,
         predictions=predictions,
         title="House Price Predictions Over Time"
     )
@@ -571,7 +629,7 @@ if __name__ == "__main__":
     
     # Test the saved model with house #14
     print("\nTesting saved model functionality...")
-    loaded_model = test_saved_model(3)
+    loaded_model = test_saved_model(11)
 
     # Make predictions for multiple years
     print("\nMaking predictions for multiple years...")
