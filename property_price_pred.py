@@ -14,6 +14,7 @@ import requests
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pickle
 
 
 USE_MPS = True 
@@ -58,32 +59,35 @@ else:
 # Load and analyze data
 df = pd.read_csv(csv_path)
 
-# Find numerical and categorical features
-total_features = df.columns
-print(f"Total features available in the dataset: {len(total_features)}")
-
-numeric_features = df.select_dtypes(include=['int64', 'float64']).columns
-print(f"The numerical features available for prediction: {numeric_features}\nand the total count is: {len(numeric_features)}")
-
-categorical_features = df.select_dtypes(include=['object']).columns
-print(f"The categorical features available for prediction: {categorical_features}\nand the total count is: {len(categorical_features)}")
-
-# %%
-# Feature selection based on correlation
+# Feature selection based on correlation with raw (unscaled) data
 correlations = df.select_dtypes(include=['int64', 'float64']).corr()['SalePrice']
-numerical_features = correlations[
-    (correlations > 0.5) &
-    (correlations.index != 'SalePrice')
-].index.tolist()
+numerical_features = [
+    'OverallQual',   # Overall material and finish quality
+    'GrLivArea',     # Above ground living area
+    'GarageCars',    # Size of garage in car capacity
+    'GarageArea',    # Size of garage in square feet
+    'TotalBsmtSF',   # Total basement square footage
+    '1stFlrSF',      # First Floor square feet
+    'FullBath',      # Number of full bathrooms
+    'TotRmsAbvGrd',  # Total rooms above ground (excluding bathrooms)
+    'YearBuilt',     # Original construction date
+    'YearRemodAdd'   # Remodel date
+]
 
-categorical_features = df.select_dtypes(include=['object'])\
-    .columns[df.select_dtypes(include=['object']).nunique() < 20].tolist()[:5]
+categorical_features = [
+    'MSZoning',      # Identifies the general zoning classification
+    'Street',        # Type of road access
+    'Alley',         # Type of alley access
+    'LotShape',      # General shape of property
+    'LandContour'    # Flatness of the property
+]
 
-print("\nAutomatically selected features:")
-print("Top numerical features:", numerical_features)
-print("Top categorical features:", categorical_features)
+print("\nSelected features:")
+print("Numerical features with correlations:")
+for feat in numerical_features:
+    print(f"{feat}: {correlations[feat]:.3f}")
+print("\nCategorical features:", categorical_features)
 
-# %%
 # Handle missing values
 print("\nHandling missing values:")
 df[numerical_features] = df[numerical_features].fillna(df[numerical_features].median())
@@ -98,52 +102,65 @@ for c in categorical_features:
     for i, category in enumerate(label_encoders[c].classes_):
         print(f"{category} -> {i}")
 
-# %%
 # Add time feature
 def add_time_feature(df):
     current_year = datetime.now().year
     df = df.copy()
-    df['YearsFromNow'] = 0
+    
+    # Initialize YearsFromNow with a small range of values for training
+    # This helps the model learn the time relationship better
+    df['YearsFromNow'] = np.random.uniform(-2, 5, len(df))
+    
     return df, current_year
 
 df, current_year = add_time_feature(df)
 
-# %%
 # Prepare features and target
 X = df[numerical_features + categorical_features + ['YearsFromNow']]
 y = df['SalePrice']
 
-# Scale numerical features and target
+# Scale numerical features
 scaler = StandardScaler()
 X[numerical_features] = scaler.fit_transform(X[numerical_features])
 
-# Scale the target variable (important for neural networks)
+# Scale YearsFromNow separately to keep it in a reasonable range
+years_scaler = StandardScaler()
+X['YearsFromNow'] = years_scaler.fit_transform(X[['YearsFromNow']])
+
+# Scale the target variable
 y_scaler = StandardScaler()
-y = pd.Series(y)  # Ensure y is a pandas Series
-y = y_scaler.fit_transform(np.array(y).reshape(-1, 1)).flatten()
+y = pd.DataFrame(y_scaler.fit_transform(y.values.reshape(-1, 1)), columns=['SalePrice'])
 
 # Split data
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=RANDOM_SEED
 )
 
+# Ensure X_train and X_test remain as DataFrames
+X_train = pd.DataFrame(X_train, columns=X.columns)
+X_test = pd.DataFrame(X_test, columns=X.columns)
+y_train = pd.DataFrame(y_train, columns=['SalePrice'])
+y_test = pd.DataFrame(y_test, columns=['SalePrice'])
+
 print(f"Training set size: {len(X_train)}")
 print(f"Test set size: {len(X_test)}")
+
+# Save feature information
+feature_info = {
+    'numerical_features': numerical_features,
+    'categorical_features': categorical_features,
+    'label_encoders': label_encoders,
+    'scaler': scaler,
+    'y_scaler': y_scaler,
+    'years_scaler': years_scaler
+}
 
 # %%
 # Create Dataset class
 class HousePriceDataset(Dataset):
     def __init__(self, X, y):
-        # Convert numpy arrays to tensors directly
-        if isinstance(X, pd.DataFrame):
-            self.X = torch.FloatTensor(X.values).to(device)
-        else:
-            self.X = torch.FloatTensor(X).to(device)
-            
-        if isinstance(y, pd.Series) or isinstance(y, pd.DataFrame):
-            self.y = torch.FloatTensor(y.values).reshape(-1, 1).to(device)
-        else:
-            self.y = torch.FloatTensor(y).reshape(-1, 1).to(device)
+        self.X = torch.FloatTensor(X.values).to(device)
+        self.y = torch.FloatTensor(y.values).to(device)
     
     def __len__(self):
         return len(self.X)
@@ -201,8 +218,7 @@ class HousePriceModel(nn.Module):
             nn.Dropout(0.1),
             
             # Output layer
-            nn.Linear(hidden_size//2, 1),
-            nn.Softplus()  # Ensure positive outputs
+            nn.Linear(hidden_size//2, 1)
         )
     
     def forward(self, x):
@@ -355,15 +371,14 @@ def predict_future_price(
     future_year: int,
     current_year: int
 ) -> float:
-    """
-    Predict house price for a future year with enhanced trend stability
-    """
     # Create a copy of features to avoid modifying the original
     future_features = features.copy()
     
     # Update the time-based feature
     years_from_now = future_year - current_year
-    future_features['YearsFromNow'] = years_from_now
+    
+    # Scale YearsFromNow using the same scaler used in training
+    future_features['YearsFromNow'] = years_scaler.transform([[years_from_now]])[0][0]
     
     # Convert to tensor and make prediction
     with torch.inference_mode():
@@ -373,29 +388,17 @@ def predict_future_price(
             features_tensor = torch.FloatTensor(future_features).unsqueeze(0).to(device)
         
         prediction = model(features_tensor)
-        price = y_scaler.inverse_transform(prediction.cpu().numpy())[0][0]
+        predicted_price = y_scaler.inverse_transform(prediction.cpu().numpy())[0][0]
     
-    # Get base price (current price)
-    base_price = y_scaler.inverse_transform([[y_test[0]]])[0][0]
+    # Apply a simple appreciation rate based on historical average
+    # Typical real estate appreciation is 3-4% per year
+    base_price = predicted_price
+    appreciation_rate = 1.035  # 3.5% annual appreciation
     
-    # Apply trend stability with smoothing
     if years_from_now > 0:
-        # Calculate minimum and maximum allowable prices
-        min_yearly_change = 0.98  # Max 2% decrease per year
-        max_yearly_change = 1.12  # Max 12% increase per year
-        
-        # Calculate compound growth bounds
-        min_price = base_price * (min_yearly_change ** years_from_now)
-        max_price = base_price * (max_yearly_change ** years_from_now)
-        
-        # Apply exponential smoothing for more stable predictions
-        alpha = 0.7  # Smoothing factor
-        smoothed_price = alpha * price + (1 - alpha) * base_price * (1.05 ** years_from_now)
-        
-        # Ensure price stays within bounds
-        price = max(min(smoothed_price, max_price), min_price)
+        predicted_price = base_price * (appreciation_rate ** years_from_now)
     
-    return max(price, 10000)  # Ensure minimum reasonable price
+    return predicted_price
 
 # %%
 # Function to visualize price predictions
@@ -457,65 +460,119 @@ def visualize_price_predictions(
     return plt.gcf()
 
 # %%
-# Train the model
-print("Starting training...")
-trained_model, final_loss = train(
-    model=model,
-    train_loader=train_loader,
-    loss_fn=loss_fn,
-    optimizer=optimizer,
-    epochs=EPOCHS,
-    patience=PATIENCE
-)
-print(f"\nTraining finished with best loss: {final_loss:.4f}")
+# Function to test saved model
+def test_saved_model(house_index=0):
+ 
+    with open('house_price_model.pkl', 'rb') as f:
+        loaded_artifacts = pickle.load(f)
+    
+    # Create a new model instance
+    input_size = len(numerical_features + categorical_features + ['YearsFromNow'])
+    loaded_model = HousePriceModel(input_size=input_size).to(device)
+    # Load the state dict
+    loaded_model.load_state_dict(loaded_artifacts['model_state_dict'])
+    loaded_model.eval()
+
+    # Extract all components
+    loaded_encoders = loaded_artifacts['artifacts']['label_encoders']
+    loaded_scaler = loaded_artifacts['artifacts']['scaler']
+    loaded_y_scaler = loaded_artifacts['artifacts']['y_scaler']  # Extract y_scaler
+    loaded_num_features = loaded_artifacts['artifacts']['numerical_features']
+    loaded_cat_features = loaded_artifacts['artifacts']['categorical_features']
+    loaded_current_year = datetime.now().year
+    
+    # Get the specified house from the test set
+    try:
+        sample_house = X_test.iloc[house_index:house_index+1]  # Get specified row as DataFrame
+        actual_price_scaled = y_test.iloc[house_index, 0]  # Get specified value
+    except IndexError:
+        print(f"\nError: House index {house_index} is out of range. Test set has {len(X_test)} houses.")
+        return None
+    
+    # Make prediction
+    loaded_model.eval()
+    with torch.no_grad():
+        sample_tensor = torch.FloatTensor(sample_house.values).to(device)
+        predicted_price_scaled = loaded_model(sample_tensor)
+        predicted_price_scaled = predicted_price_scaled.cpu().numpy()[0][0]
+    
+    # Inverse transform the scaled values to get actual prices
+    actual_price = loaded_y_scaler.inverse_transform([[actual_price_scaled]])[0][0]
+    predicted_price = loaded_y_scaler.inverse_transform([[predicted_price_scaled]])[0][0]
+    
+    print(f"\nModel Testing Results for House #{house_index}:")
+    print(f"Features of the house:")
+    for feature in numerical_features:
+        print(f"{feature}: {sample_house[feature].iloc[0]:,.2f}")
+    for feature in categorical_features:
+        print(f"{feature}: {sample_house[feature].iloc[0]}")
+    print(f"\nActual Price: ${actual_price:,.2f}")
+    print(f"Predicted Price: ${predicted_price:,.2f}")
+    print(f"Difference: ${abs(actual_price - predicted_price):,.2f}")
+    print(f"Percentage Difference: {abs(actual_price - predicted_price) / actual_price * 100:.2f}%")
+    
+    return loaded_model
 
 # %%
-# Test the model
-print("\nEvaluating model...")
-test_results = test(
-    model=trained_model,
-    test_loader=test_loader,
-    loss_fn=loss_fn
-)
+# Function to make predictions for multiple years
+def test_predictions(model):
+    print("\nPredicting house prices for the next 5 years...")
+    predictions = {}
+    sample_house = X_test.iloc[0]
 
-# %%
-# Example prediction for a house
-print("\nExample prediction for a house:")
-if isinstance(X_test, pd.DataFrame):
-    sample_house = X_test.iloc[0].values
-else:
-    sample_house = X_test[0]
+    for year in range(current_year + 1, current_year + 8):  
+        predicted_price = predict_future_price(
+            model, sample_house, year, current_year
+        )
+        predictions[year] = predicted_price
+        print(f"Predicted price for {year}: ${predicted_price:,.2f}")
 
-with torch.inference_mode():
-    sample_tensor = torch.FloatTensor(sample_house).unsqueeze(0).to(device)
-    sample_pred = trained_model(sample_tensor)
-    sample_pred = y_scaler.inverse_transform(sample_pred.cpu().numpy())[0][0]
-    actual_price = y_scaler.inverse_transform([[y_test[0]]])[0][0]
-print(f"Predicted price: ${sample_pred:,.2f}")
-print(f"Actual price: ${actual_price:,.2f}")
-
-# %%
-# Predict future prices for a sample house
-print("\nPredicting house prices for the next 5 years...")
-predictions = {}
-sample_house = X_test.iloc[0]
-
-for year in range(current_year + 1, current_year + 6):  
-    predicted_price = predict_future_price(
-        trained_model, sample_house, year, current_year
+    # Visualize predictions
+    visualize_price_predictions(
+        current_year=current_year,
+        predictions=predictions,
+        title="House Price Predictions Over Time"
     )
-    predictions[year] = predicted_price
-    print(f"Predicted price for {year}: ${predicted_price:,.2f}")
 
-# Visualize predictions
-visualize_price_predictions(
-    current_year=current_year,
-    predictions=predictions,
-    title="House Price Prediction Over Next 5 Years"
-)
+# %%
+if __name__ == "__main__":
+    # Train the model
+    print("Starting training...")
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=NUM_WORKERS
+    )
+    
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS
+    )
+    
+    print("\nTraining model...")
+    trained_model, _ = train(model, train_loader, optimizer, loss_fn)
+    
+    print("\nTesting model...")
+    test_metrics = test(trained_model, test_loader, loss_fn)
+    
+    # Save model and artifacts together
+    print("\nSaving model and artifacts...")
+    model_save = {
+        'model_state_dict': trained_model.state_dict(),
+        'artifacts': feature_info,
+        'test_metrics': test_metrics
+    }
+    with open('house_price_model.pkl', 'wb') as f:
+        pickle.dump(model_save, f)
+    print("\nModel and artifacts saved to 'house_price_model.pkl'")
+    
+    # Test the saved model with house #14
+    print("\nTesting saved model functionality...")
+    loaded_model = test_saved_model(3)
 
-# Save the plot
-plt.savefig('price_predictions.png', dpi=300, bbox_inches='tight')
-plt.close()
-
-print("\nVisualization has been saved as 'price_predictions.png'")
+    # Make predictions for multiple years
+    print("\nMaking predictions for multiple years...")
+    test_predictions(loaded_model)
